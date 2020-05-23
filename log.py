@@ -8,13 +8,15 @@ class Log:
         else:
             self.file_log=open(name,"r")
 
-    def read_and_print(file_name):
-        if not os.path.isfile(name):
+    @staticmethod
+    def read_and_return_str(file_name):
+        if not os.path.isfile(file_name):
             return -1
         file=open(file_name,"r")
         for line in file:
             print(line)
 
+    @staticmethod
     def read_and_return_list(file_name):
         if not os.path.isfile(file_name):
             return []
@@ -25,6 +27,7 @@ class Log:
                 out.append(add)
         return out
 
+    @staticmethod
     def save_with_ignore_same(file_name, text): #Использовать только для сохранения пиров 
         if not os.path.isfile(file_name):
             file=open(file_name,"w")
@@ -37,8 +40,8 @@ class Log:
         file.write(text)
         file.close()
 
-    def save_message(text):
+    def save_message(self, text):
         self.file_log.write(text + '\n')
         
-    def close():
+    def close(self):
         self.file_log.close()
