@@ -10,6 +10,7 @@ class Server(Log):
         self.clients_names = {}  # Карта ников пользователей
         self.name = ""  # Имя сервера
 
+        self.running = True
         self.client_socket = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
         self.server_socket = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
         self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -17,9 +18,6 @@ class Server(Log):
         self.server_socket.listen()
         self.server_socket.settimeout(1)
         self.client_socket.settimeout(1)
-
-    def set_name(self, name):
-        self.name = name
 
     def send(self, message):  # Отправляем сообщение на сервер
         try:
@@ -36,13 +34,14 @@ class Server(Log):
         create_thread.start()
         create_thread.join(0)
         connection, address = self.server_socket.accept()
-        while connection:
+        while connection and self.running:
             try:
                 data = connection.recv(1024)
             except socket.timeout:
                 continue
             self.requests.update({c_address: data.decode()})
 
+    # check-функции
     def check_connections(self):
         for peer in self.clients:
             try:
@@ -63,14 +62,21 @@ class Server(Log):
             return None
         return data
 
+    # set-функции
+    def set_name(self, name):
+        self.name = name
+
+    # add-функции
     def add_user(self, user_address, user_nick):
         self.clients.append(user_address)
         self.clients_names.update({user_address: user_nick})
 
+    # del-функции
     def del_user(self, user_address):
         self.clients.remove(user_address)
         self.clients_names.pop(user_address)
 
+    # get-функции
     def get_users_data(self):
         return self.clients_names.items()
 
@@ -78,6 +84,7 @@ class Server(Log):
         return self.clients_names.get(address)
 
     def kill(self):
+        self.running = False
         self.client_socket.close()
         self.server_socket.close()
 
