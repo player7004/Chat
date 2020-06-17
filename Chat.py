@@ -8,7 +8,6 @@ from threading import Thread
 server_port = 6060
 listen_port = 6061
 font_size = "Arial 10"
-listening = False
 listening_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 listening_socket.bind(('localhost', listen_port))
 listening_socket.settimeout(0.2)
@@ -43,20 +42,21 @@ def load_error_window(text):
     root.mainloop()
 
 
-def load_chat_window(user, your_name, address=""):
+def load_chat_window(address, your_name):
     def end():
         nonlocal running
+        server.close_connection(address, server.get_ind_by_address(address))
         running = False
-        time.sleep(1)
+        time.sleep(2)
         window.quit()
         window.destroy()
 
-    def recieve_message():
+    def get_message():
         while running:
-            time.sleep(0.5)
-            data = server.check_request(user)
-            if data:
-                messages.insert(END, user + ": " + data)
+            time.sleep(0.2)
+            if server.check_request(address):
+                message = server.get_request(address)
+                messages.insert(END, "{}: {}".format(user, message))
 
     def send():
         text = send_text.get(1.0, END)
@@ -64,14 +64,17 @@ def load_chat_window(user, your_name, address=""):
         if text == "":
             return
         try:
-            server.send(text)
+            server.send(address, text)
         except OSError:
             end()
             load_error_window("User disconnected")
             return
         send_text.delete(1.0, END)
         messages.insert(END, your_name + ": " + text)
-    running=True
+
+    user = str(server.get_user_name_by_address(address))
+    running = True
+
     window = Tk()
     window.geometry("400x270+400+400")
     window.title("Chat with " + user)
@@ -97,7 +100,7 @@ def load_chat_window(user, your_name, address=""):
     send_text.pack(fill=X, padx=5, pady=5)
     send_button.pack(fill=BOTH, padx=5)
     quit_button.pack(fill=BOTH, padx=5, pady=5)
-    recieve_thread = Thread(target=recieve_message)
+    recieve_thread = Thread(target=get_message)
     recieve_thread.start()
     recieve_thread.join(0)
     window.mainloop()
@@ -144,38 +147,50 @@ def load_get_name_window():
 
 def load_main_window(nick):
 
-    def delete():
-        pass
+    def listen():
+        nonlocal listening
+        while listening:
+            try:
+                data, address = listening_socket.recvfrom(32)
+            except socket.timeout:
+                continue
+            server.add_user_name(str(address[0]), data)
+            listen_frame_listbox_online.insert(END, str(address[0]) + data.decode())
 
-    def direct_connect():
-        addr = enter_ip_text.get(1.0,END)
-        addr = addr[:addr.find("\n")]
-        if server.check_connection(addr):
-            user_name = server.get_user_name(addr)
-            load_chat_window(user_name, nick)
+    def connect():
+        address = enter_ip_text.get(1.0, END)
+        address = address[:address.find("\n")]
+        if server.check_address(address):
+            load_chat_window(address, nick)
             return
-        thread = Thread(target=server.create_connection, args=(addr, server_port))
-        thread.start()
-        thread.join(0)
-        user_name = server.get_user_name(addr)
-        load_chat_window(user_name, nick)
+        try:
+            thread = Thread(target=server.create_connection, args=(address, server_port))
+            thread.start()
+            thread.join(0)
+            load_chat_window(address, nick)
+        except OSError:
+            load_error_window("Can`t connect to: " + address)
+            return
 
     def end():
-        global listening
+        nonlocal listening
         if listening:
             change_status()
-        time.sleep(0.2)
+        time.sleep(1)
         main_window.quit()
         main_window.destroy()
         server.kill()
         listening_socket.close()
 
     def change_status():
-        global listening
+        nonlocal listening
         listening = not listening
         if listening:
             settings_label_status['bg'] = "green"
             settings_label_status['text'] = "You are online"
+            listen_thread = Thread(target=listen)
+            listen_thread.start()
+            listen_thread.join(0)
         else:
             settings_label_status['bg'] = "red"
             settings_label_status['text'] = "You are offline"
@@ -183,6 +198,14 @@ def load_main_window(nick):
     def change_nick():
         name = load_get_name_window()
         name_frame_label['text'] = "Your nick: " + name
+
+    listening = True
+    listen_thread = Thread(target=listen)
+    listen_thread.start()
+    listen_thread.join(0)
+
+    server.add_user_name("localhost", nick)
+    server.add_user_name("127.0.0.1", nick)
 
     # Основное окно
     main_window = Tk()
@@ -197,7 +220,7 @@ def load_main_window(nick):
 
     enter_ip_label = Label(enter_ip_frame, text="Write ip to connect/open chat window:", font=font_size)
     enter_ip_text = Text(enter_ip_frame, height=1, bg="white", fg="black", wrap=WORD)
-    enter_ip_connect = Button(enter_ip_frame, text="Connect", command=direct_connect)
+    enter_ip_connect = Button(enter_ip_frame, text="Connect", command=connect)
 
     name_frame_label = Label(name_frame, text="Your nick: " + nick, font=font_size)
     name_frame_ip_label = Label(name_frame, text="Your ip: " + socket.gethostbyname(socket.getfqdn()), font=font_size)
@@ -249,7 +272,7 @@ def run():
     your_name = load_get_name_window()
     if your_name == "":
         return
-    server.set_name(your_name)
+    server.set_server_name(your_name)
     load_main_window(your_name)
 
 
