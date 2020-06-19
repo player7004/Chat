@@ -5,7 +5,7 @@ from time import sleep
 import datetime
 
 
-class Server(Log):
+class Server:
     def __init__(self, port):
         now = datetime.datetime.now()
         self.server_log = Log("server_log.txt")
@@ -58,7 +58,7 @@ class Server(Log):
 
     def add_request(self, address, message):  # Добавляет сообщение от клиента
         self.requests.update({address: message})
-        self.server_log.save_message("Added request {} from {}".format(message, address))
+        self.server_log.save_message("Added request from {}".format(address))
 
     # del - функции
 
@@ -91,14 +91,15 @@ class Server(Log):
         try:
             thread = Thread(target=self.connect, args=(address, port, sock_ind))
             thread.start()
-            thread.join(0.1)
+            thread.join(0)
             connection, address_1 = self.server_socket.accept()
             connection.settimeout(0.2)
             self.add_user(address, sock_ind)
         except OSError:
             self.server_log.save_message("Failed to create connection: {}".format("Socket is busy or offline"))
             return OSError
-        while self.running:
+        while self.running and self.clients_info[sock_ind]:
+            print(1)
             try:
                 data = connection.recv(1024)
             except socket.timeout:
@@ -108,7 +109,7 @@ class Server(Log):
                 self.close_connection(address, sock_ind)
                 return OSError
             if data:
-                self.server_log.save_message("Received message {} from {}".format(data.decode(), address))
+                self.server_log.save_message("Received message from {}".format(address))
                 self.add_request(address, data.decode())
         self.close_connection(address, sock_ind)
 
@@ -122,9 +123,9 @@ class Server(Log):
             elif ind == 2:
                 self.third_client.send(message.encode())
         except OSError:
-            self.server_log.save_message("Error sending message {} to {}".format(message,address))
+            self.server_log.save_message("Error sending message to {}".format(address))
             return OSError
-        self.server_log.save_message("Send message {} to {} with socket {}".format(message, address, ind))
+        self.server_log.save_message("Send message to {} with socket {}".format(address, ind))
 
     def connect(self, address, port, sock_ind):  # Создаёт подключение c соккетом по индексу
         if sock_ind == 0:
@@ -168,7 +169,7 @@ class Server(Log):
             message = self.requests.pop(address)
         except KeyError:
             message = None
-        self.server_log.save_message("Request {} from {} was taken".format(message, address))
+        self.server_log.save_message("Request from {} was taken".format(address))
         return message
 
     def check_request(self, address):  # Возвращает Правда, если сообщение есть

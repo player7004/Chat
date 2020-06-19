@@ -7,11 +7,21 @@ from threading import Thread
 
 server_port = 6060
 listen_port = 6061
+check_port = 6062
+
 font_size = "Arial 10"
-listening_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+listening_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # Слушающий соккет
 listening_socket.bind(('localhost', listen_port))
 listening_socket.settimeout(0.2)
+
+check_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # Соккет проверки
+check_socket.bind(('localhost', check_port))
+check_socket.settimeout(1)
+
 server = Server(server_port)
+
+window_manager = {}  # Менеджер открытых окон аддресс: правда - открыто/ ложь - закрыто
 
 
 def insert(file_name, listbox):
@@ -34,7 +44,7 @@ def load_error_window(text):
     error_label = Label(root, text="Error: " + text, font=font_size)
     quit_continue = Button(quit_frame, text="Continue", command=end)
 
-    quit_frame.pack(fill=BOTH,side = BOTTOM)
+    quit_frame.pack(fill=BOTH, side=BOTTOM)
 
     error_label.pack(fill=BOTH)
     quit_continue.pack(fill=BOTH, padx=5, pady=5)
@@ -44,8 +54,11 @@ def load_error_window(text):
 
 def load_chat_window(address, your_name):
     def end():
+        window_manager.pop(address)
         nonlocal running
+        print(server.get_ind_by_address(address))
         server.close_connection(address, server.get_ind_by_address(address))
+        user_log.close()
         running = False
         time.sleep(2)
         window.quit()
@@ -53,10 +66,11 @@ def load_chat_window(address, your_name):
 
     def get_message():
         while running:
-            time.sleep(0.2)
+            time.sleep(0.1)
             if server.check_request(address):
                 message = server.get_request(address)
                 messages.insert(END, "{}: {}".format(user, message))
+                user_log.save_message("{}: {}".format(user, message))
 
     def send():
         text = send_text.get(1.0, END)
@@ -71,9 +85,13 @@ def load_chat_window(address, your_name):
             return
         send_text.delete(1.0, END)
         messages.insert(END, your_name + ": " + text)
+        user_log.save_message("{}: {}".format(your_name, text))
 
     user = str(server.get_user_name_by_address(address))
     running = True
+    user_log = Log(user + ".txt")
+
+    window_manager.update({address: True})
 
     window = Tk()
     window.geometry("400x270+400+400")
@@ -103,6 +121,9 @@ def load_chat_window(address, your_name):
     recieve_thread = Thread(target=get_message)
     recieve_thread.start()
     recieve_thread.join(0)
+
+    insert(user + ".txt", messages)
+
     window.mainloop()
 
 
@@ -147,35 +168,87 @@ def load_get_name_window():
 
 def load_main_window(nick):
 
-    def listen():
-        nonlocal listening
-        while listening:
+    def listen_loop():
+        while running:
+            time.sleep(0.1)
+            if listening:
+                try:
+                    data, address = listening_socket.recvfrom(32)
+                except socket.timeout:
+                    continue
+                except OSError:
+                    end()
+                    load_error_window("Unknown error")
+                    return
+                server.add_user_name(address[0], data.decode())
+                listen_connect(address[0])
+
+    def check_loop():
+        while running:
+            time.sleep(0.1)
             try:
-                data, address = listening_socket.recvfrom(32)
+                data, address = listening_socket.recvfrom(5)
+                print(data, address)
             except socket.timeout:
                 continue
-            server.add_user_name(str(address[0]), data)
-            listen_frame_listbox_online.insert(END, str(address[0]) + data.decode())
+            except OSError:
+                end()
+                load_error_window("Unknown error")
+                return
+            if data == b"alive":
+                check_socket.sendto(b"alive", (address[0], check_port))
 
-    def connect():
-        address = enter_ip_text.get(1.0, END)
-        address = address[:address.find("\n")]
-        if server.check_address(address):
-            load_chat_window(address, nick)
-            return
+    def check_ip(address):
         try:
+            check_socket.sendto(b"alive", (address, check_port))
+            data, address = check_socket.recvfrom(5)
+        except socket.timeout:
+            return False
+        except OSError:
+            return False
+        if data == b"alive":
+            return True
+        return False
+
+    def listen_connect(address):
+        if server.check_address(address):
+            if not window_manager.get(address):
+                load_chat_window(address, nick)
+            else:
+                load_error_window("Chat already open")
+            return
+        if check_ip(address):
             thread = Thread(target=server.create_connection, args=(address, server_port))
             thread.start()
             thread.join(0)
             load_chat_window(address, nick)
-        except OSError:
+        else:
+            load_error_window("Can`t connect to: " + address)
+            return
+
+    def connect():
+        address = enter_ip_text.get(1.0, END)
+        address = address[:address.find("\n")]
+        enter_ip_text.delete(1.0, END)
+        if server.check_address(address):
+            if not window_manager.get(address):
+                load_chat_window(address, nick)
+            else:
+                load_error_window("Chat already open")
+            return
+        if check_ip(address):
+            thread = Thread(target=server.create_connection, args=(address, server_port))
+            thread.start()
+            thread.join(0)
+            load_chat_window(address, nick)
+        else:
             load_error_window("Can`t connect to: " + address)
             return
 
     def end():
-        nonlocal listening
-        if listening:
-            change_status()
+        nonlocal listening, running
+        listening = False
+        running = False
         time.sleep(1)
         main_window.quit()
         main_window.destroy()
@@ -188,21 +261,26 @@ def load_main_window(nick):
         if listening:
             settings_label_status['bg'] = "green"
             settings_label_status['text'] = "You are online"
-            listen_thread = Thread(target=listen)
-            listen_thread.start()
-            listen_thread.join(0)
         else:
             settings_label_status['bg'] = "red"
             settings_label_status['text'] = "You are offline"
 
     def change_nick():
+        nonlocal nick
         name = load_get_name_window()
         name_frame_label['text'] = "Your nick: " + name
+        nick = name
 
-    listening = True
-    listen_thread = Thread(target=listen)
+    running = True
+    listening = False
+
+    listen_thread = Thread(target=listen_loop)
     listen_thread.start()
     listen_thread.join(0)
+
+    check_thread = Thread(target=check_loop)
+    check_thread.start()
+    check_thread.join(0)
 
     server.add_user_name("localhost", nick)
     server.add_user_name("127.0.0.1", nick)
@@ -231,7 +309,7 @@ def load_main_window(nick):
     listen_frame_label_online = Label(listen_frame, text="Users online: ", font=font_size)
     listen_frame_label_peers = Label(listen_frame, text="Last users: ", font=font_size)
     listen_frame_listbox_online = Listbox(listen_frame, yscrollcommand=listen_frame_scrollbar_online.set)
-    listen_frame_listbox_peers = Listbox(listen_frame, yscrollcomman= listen_frame_scrollbar_peers.set)
+    listen_frame_listbox_peers = Listbox(listen_frame, yscrollcomman=listen_frame_scrollbar_peers.set)
     insert("peers.txt", listen_frame_listbox_peers)
 
     settings_label_status = Label(settings_frame, text="You are offline", font=font_size, bg="red")
