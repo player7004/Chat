@@ -36,7 +36,6 @@ def load_error_window(text):
 
     root = Tk()
     root.resizable(False, False)
-    root.geometry("200x200+400+400")
     root.title("Error!")
 
     quit_frame = Frame(root, relief=RAISED, borderwidth=1)
@@ -207,6 +206,7 @@ def load_main_window(nick):
         except OSError:
             return False
         if data == b"alive":
+            listening_socket.sendto(nick.encode(), (address[0], listen_port))
             return True
         return False
 

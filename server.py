@@ -1,4 +1,5 @@
 import socket
+import rsa
 from log import Log
 from threading import Thread
 from time import sleep
@@ -15,6 +16,9 @@ class Server:
         self.clients = []  # Список подключённых ip
         self.requests = {}  # Карта входящий сообщений адрес: сообщение
         self.clients_names = Log.read_and_return_dict("clients_names.txt")  # Карта ников пользователей адрес: имя
+
+        self.public_key, self.private_key = rsa.newkeys(512)
+        self.keys = [0 for i in range(3)]
 
         self.first_client = socket.socket()
         self.second_client = socket.socket()
@@ -49,8 +53,11 @@ class Server:
         else:
             self.clients.append(address)
             self.client_map.update({address: sock_ind})
-        self.clients_info[sock_ind] = 1
         self.server_log.save_message("Added user: {} to sock {}".format(str(address), str(sock_ind)))
+
+    def add_key(self,address, key):
+        sock_ind = self.get_ind_by_address(address)
+        self.keys[sock_ind] = key
 
     def add_user_name(self, address, name):  # Добавляет имя пользователя
         self.clients_names.update({address: name})
@@ -79,6 +86,10 @@ class Server:
             self.clients.remove(address)
         self.server_log.save_message("Deleted user {} with socket {}".format(address, sock_ind))
 
+    def del_key(self, address):
+        sock_ind = self.get_ind_by_address(address)
+        self.keys[sock_ind] = 0
+
     # server - функции
 
     def create_connection(self, address, port):  # Создаёт чат-сессию
@@ -98,10 +109,13 @@ class Server:
         except OSError:
             self.server_log.save_message("Failed to create connection: {}".format("Socket is busy or offline"))
             return OSError
+        self.raw_send(address, self.public_key.save_pkcs1())
+        key = connection.recv(162)
+        key = rsa.PublicKey.load_pkcs1(key)
+        self.add_key(address, key)
         while self.running and self.clients_info[sock_ind]:
-            print(1)
             try:
-                data = connection.recv(1024)
+                data = connection.recv(4096)
             except socket.timeout:
                 continue
             except OSError:
@@ -109,6 +123,9 @@ class Server:
                 self.close_connection(address, sock_ind)
                 return OSError
             if data:
+                print(data)
+                data = rsa.decrypt(data, self.private_key)
+                print(data)
                 self.server_log.save_message("Received message from {}".format(address))
                 self.add_request(address, data.decode())
         self.close_connection(address, sock_ind)
@@ -117,15 +134,28 @@ class Server:
         ind = self.get_ind_by_address(address)
         try:
             if ind == 0:
-                self.first_client.send(message.encode())
+                self.first_client.send(rsa.encrypt(message.encode(), self.keys[ind]))
             elif ind == 1:
-                self.second_client.send(message.encode())
+                self.second_client.send(rsa.encrypt(message.encode(), self.keys[ind]))
             elif ind == 2:
-                self.third_client.send(message.encode())
+                self.third_client.send(rsa.encrypt(message.encode(), self.keys[ind]))
         except OSError:
             self.server_log.save_message("Error sending message to {}".format(address))
             return OSError
         self.server_log.save_message("Send message to {} with socket {}".format(address, ind))
+
+    def raw_send(self, address, message):
+        ind = self.get_ind_by_address(address)
+        try:
+            if ind == 0:
+                self.first_client.send(message)
+            elif ind == 1:
+                self.second_client.send(message)
+            elif ind == 2:
+                self.third_client.send(message)
+        except OSError:
+            return OSError
+
 
     def connect(self, address, port, sock_ind):  # Создаёт подключение c соккетом по индексу
         if sock_ind == 0:
@@ -194,9 +224,12 @@ class Server:
         return False
 
     def close_connection(self, address, sock_ind):  # Закрывает соединение
-        self.reload_socket(sock_ind)
-        self.del_user(address, sock_ind)
-        self.server_log.save_message("Connection with {} closed".format(address))
+        try:
+            self.reload_socket(sock_ind)
+            self.del_user(address, sock_ind)
+            self.server_log.save_message("Connection with {} closed".format(address))
+        except TypeError:
+            quit()
 
     def kill(self):  # Останавливает сервер
         self.running = False
