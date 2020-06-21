@@ -23,6 +23,15 @@ server = Server(server_port)
 
 window_manager = {}  # Менеджер открытых окон аддресс: правда - открыто/ ложь - закрыто
 
+users_online = []
+
+
+def check_online(address):
+    for i in users_online:
+        if address == i:
+            return True
+    return False
+
 
 def insert(file_name, listbox):
     for line in Log.read_and_return_list(file_name):
@@ -180,6 +189,9 @@ def load_main_window(nick):
                     load_error_window("Unknown error")
                     return
                 server.add_user_name(address[0], data.decode())
+                if not check_online(address[0]):
+                    listen_frame_listbox_online.insert(END, address[0])
+                    users_online.append(address[0])
                 listen_connect(address[0])
 
     def check_loop():
@@ -237,6 +249,7 @@ def load_main_window(nick):
                 load_error_window("Chat already open")
             return
         if check_ip(address):
+            Log.save_with_ignore_same("peers.txt", address)
             thread = Thread(target=server.create_connection, args=(address, server_port))
             thread.start()
             thread.join(0)
