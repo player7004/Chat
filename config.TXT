@@ -1,0 +1,6 @@
+server_port:6060
+listen_port:6061
+check_port:6062
+timeout:0.2
+label_font:Arial 10
+button_font:Arial 9
