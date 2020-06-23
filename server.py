@@ -7,10 +7,11 @@ import datetime
 
 
 class Server:
-    def __init__(self, port):
+    def __init__(self, port, timeout):
         now = datetime.datetime.now()
         self.server_log = Log("server_log.txt")
         self.running = True
+        self.timeout = timeout
         self.name = ""  # Имя сервера
 
         self.clients = []  # Список подключённых ip
@@ -31,9 +32,9 @@ class Server:
         self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.server_socket.bind(('localhost',port))
         self.server_socket.listen()
-        self.first_client.settimeout(1)
-        self.second_client.settimeout(1)
-        self.third_client.settimeout(1)
+        self.first_client.settimeout(timeout)
+        self.second_client.settimeout(timeout)
+        self.third_client.settimeout(timeout)
 
         self.server_log.save_message("\n\n{}\nServer initialized".format(str(now)))
 
@@ -156,7 +157,6 @@ class Server:
         except OSError:
             return OSError
 
-
     def connect(self, address, port, sock_ind):  # Создаёт подключение c соккетом по индексу
         if sock_ind == 0:
             try:
@@ -204,10 +204,7 @@ class Server:
 
     def check_request(self, address):  # Возвращает Правда, если сообщение есть
         message = self.requests.get(address)
-        if message:
-            return True
-        else:
-            return False
+        return bool(message)
 
     def get_ind_by_address(self, address):  # Возвращет номер соккета, к которому подключён адрес
         ind = self.client_map.get(address)
