@@ -1,12 +1,10 @@
-import socket
-from server import Server
-from log import Log
+import socket, time
 from tkinter import *
-import time
 from threading import Thread
+from src.server import Server
+from src.log import Log
 
-config = Log.read_and_return_dict("config.txt")
-
+config = Log.read_and_return_dict("config.TXT")
 server_port = int(config["server_port"])
 listen_port = int(config["listen_port"])
 check_port = int(config["check_port"])
@@ -41,7 +39,6 @@ def load_chat_window(address, your_name):
     def end():
         window_manager.pop(address)
         nonlocal running
-        print(server.get_ind_by_address(address))
         server.close_connection(address, server.get_ind_by_address(address))
         user_log.close()
         running = False
@@ -176,7 +173,6 @@ def load_main_window(nick):
             time.sleep(0.1)
             try:
                 data, address = listening_socket.recvfrom(5)
-                print(data, address)
             except socket.timeout:
                 continue
             except OSError:
@@ -371,5 +367,3 @@ def run():
     load_main_window(your_name)
 
 
-if __name__ == "__main__":
-    run()
