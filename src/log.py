@@ -10,7 +10,7 @@ class Log:
             self.file_log = open(name,"a")
 
     @staticmethod
-    def read_and_return_list(file_name):
+    def read_and_return_list(file_name):  # Читает из файла и возвращает лист
         if not os.path.isfile(file_name):
             return []
         out = []
@@ -21,7 +21,7 @@ class Log:
         return out
 
     @staticmethod
-    def read_and_return_dict(file_name):
+    def read_and_return_dict(file_name):  # Читает из файла и возвращает словарь
         if not os.path.isfile(file_name):
             return {}
         out = {}
@@ -35,7 +35,7 @@ class Log:
         return out
 
     @staticmethod
-    def save_with_ignore_same(file_name, text):  # Использовать только для сохранения пиров
+    def save_with_ignore_same(file_name, text):  # Сохраняет в файл данные, игнорирую повторяющиеся
         if not os.path.isfile(file_name):
             file = open(file_name,"w")
             file.close()
@@ -48,7 +48,7 @@ class Log:
             file.close()
 
     @staticmethod
-    def save_dict(dictionary, file_name):
+    def save_dict(dictionary, file_name):  # Сохраняет словарь
         with open(file_name, "w") as file:
             for i in dictionary:
                 file.write("{}:{}\n".format(str(i), str(dictionary.get(i))))

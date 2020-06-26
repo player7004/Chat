@@ -6,7 +6,7 @@ from time import sleep
 import datetime
 
 
-class Server:
+class Server:  # Сервер для чата
     def __init__(self, port, timeout):
         now = datetime.datetime.now()
         self.server_log = Log("server_log.txt")
@@ -56,7 +56,7 @@ class Server:
             self.client_map.update({address: sock_ind})
         self.server_log.save_message("Added user: {} to sock {}".format(str(address), str(sock_ind)))
 
-    def add_key(self, address, key):
+    def add_key(self, address, key):  # Добавляет RSA publickey пользователю
         sock_ind = self.get_ind_by_address(address)
         self.keys[sock_ind] = key
 
@@ -87,7 +87,7 @@ class Server:
             self.clients.remove(address)
         self.server_log.save_message("Deleted user {} with socket {}".format(address, sock_ind))
 
-    def del_key(self, address):
+    def del_key(self, address):  # Удаляет RSA publickey у пользователя
         sock_ind = self.get_ind_by_address(address)
         self.keys[sock_ind] = 0
 
@@ -130,7 +130,7 @@ class Server:
                 self.add_request(address, data.decode())
         self.close_connection(address, sock_ind)
 
-    def send(self, address, message):
+    def send(self, address, message):  # Отправляет сообщения с шифрованием
         ind = self.get_ind_by_address(address)
         try:
             if ind == 0:
@@ -144,7 +144,7 @@ class Server:
             return OSError
         self.server_log.save_message("Send message to {} with socket {}".format(address, ind))
 
-    def raw_send(self, address, message):
+    def raw_send(self, address, message):  # Отправляет сообщение без шифрования
         ind = self.get_ind_by_address(address)
         try:
             if ind == 0:
@@ -154,7 +154,9 @@ class Server:
             elif ind == 2:
                 self.third_client.send(message)
         except OSError:
+            self.server_log.save_message("Error raw sending message to {}".format(address))
             return OSError
+        self.server_log.save_message("Raw send message to {} with socket {}".format(address, ind))
 
     def connect(self, address, port, sock_ind):  # Создаёт подключение c соккетом по индексу
         if sock_ind == 0:

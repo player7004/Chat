@@ -13,7 +13,7 @@ label_font = config["label_font"]
 button_font = config["button_font"]
 
 
-def load_error_window(text):
+def load_error_window(text):  # Загружает окно загрузки с указанным текстом
     def end():
         root.quit()
         root.destroy()
@@ -35,7 +35,7 @@ def load_error_window(text):
     root.mainloop()
 
 
-def load_chat_window(address, your_name):
+def load_chat_window(address, your_name):  # Загружает окно чата. Нужен адрес пользователя и имя локального клиента
     def end():
         window_manager.pop(address)
         nonlocal running
@@ -109,7 +109,7 @@ def load_chat_window(address, your_name):
     window.mainloop()
 
 
-def load_get_name_window():
+def load_get_name_window():  # Загружает окно получения имени, возвращает полученное имя
     name = ""
 
     def get_text():
@@ -148,9 +148,9 @@ def load_get_name_window():
     return name
 
 
-def load_main_window(nick):
+def load_main_window(nick):  # Загружает основное окно. Нужно имя локального пользователя
 
-    def listen_loop():
+    def listen_loop():  # Прослушивает и ловит входящие подключения
         while running:
             time.sleep(0.1)
             if listening:
@@ -168,7 +168,7 @@ def load_main_window(nick):
                     users_online.append(address[0])
                 listen_connect(address[0])
 
-    def check_loop():
+    def check_loop():  # Прослушивает для проверки рентабельности подключения
         while running:
             time.sleep(0.1)
             try:
@@ -182,7 +182,7 @@ def load_main_window(nick):
             if data == b"alive":
                 check_socket.sendto(b"alive", (address[0], check_port))
 
-    def check_ip(address):
+    def check_ip(address):  # Проверяет рентабельность подключения
         try:
             check_socket.sendto(b"alive", (address, check_port))
             data, address = check_socket.recvfrom(5)
@@ -195,7 +195,7 @@ def load_main_window(nick):
             return True
         return False
 
-    def listen_connect(address):
+    def listen_connect(address):  # Подключает при входящем запросе на подключение
         if server.check_address(address):
             if not window_manager.get(address):
                 load_chat_window(address, nick)
@@ -211,7 +211,7 @@ def load_main_window(nick):
             load_error_window("Can`t connect to: " + address)
             return
 
-    def connect():
+    def connect():   # Исходящее подключение
         address = enter_ip_text.get(1.0, END)
         address = address[:address.find("\n")]
         enter_ip_text.delete(1.0, END)
@@ -231,7 +231,7 @@ def load_main_window(nick):
             load_error_window("Can`t connect to: " + address)
             return
 
-    def end():
+    def end():  # Останавливет работу
         nonlocal listening, running
         listening = False
         running = False
@@ -241,7 +241,7 @@ def load_main_window(nick):
         server.kill()
         listening_socket.close()
 
-    def change_status():
+    def change_status():  # Включает/Выключает прослушивание
         nonlocal listening
         listening = not listening
         if listening:
@@ -251,7 +251,7 @@ def load_main_window(nick):
             settings_label_status['bg'] = "red"
             settings_label_status['text'] = "You are offline"
 
-    def change_nick():
+    def change_nick():  # Меняет имя пользователя
         nonlocal nick
         name = load_get_name_window()
         name_frame_label['text'] = "Your nick: " + name
@@ -347,19 +347,19 @@ window_manager = {}  # Менеджер открытых окон аддресс
 users_online = []  # Лист с пользователей онлайн
 
 
-def check_in_online(address):
+def check_in_online(address):  # Проверяет пользователя в списке онлайн
     for i in users_online:
         if address == i:
             return True
     return False
 
 
-def insert(file_name, listbox):
+def insert(file_name, listbox):  # Вытаскиваем из файла значение и суёт их в лист
     for line in Log.read_and_return_list(file_name):
         listbox.insert(END, line)
 
 
-def run():
+def run():  # Запускает сервер
     your_name = load_get_name_window()
     if your_name == "":
         return
