@@ -96,7 +96,7 @@ class Server:  # Сервер для чата
     def create_connection(self, address, port):  # Создаёт чат-сессию
         self.server_log.save_message("Creating connection with {}:{}".format(address, port))
         sock_ind = self.get_free_socket()
-        self.server_log.save_message("Socket {}".format(sock_ind))
+        self.server_log.save_message("Socket {} is busy now".format(sock_ind))
         if not sock_ind and sock_ind != 0:
             self.server_log.save_message("Failed to create connection: {}".format("All sockets are in use"))
             return OSError
@@ -203,10 +203,6 @@ class Server:  # Сервер для чата
         self.server_log.save_message("Request from {} was taken".format(address))
         return message
 
-    def check_request(self, address):  # Возвращает Правда, если сообщение есть
-        message = self.requests.get(address)
-        return bool(message)
-
     def get_ind_by_address(self, address):  # Возвращет номер соккета, к которому подключён адрес
         ind = self.client_map.get(address)
         return ind
@@ -220,6 +216,10 @@ class Server:  # Сервер для чата
             if i == address:
                 return True
         return False
+
+    def check_request(self, address):  # Возвращает Правда, если сообщение есть
+        message = self.requests.get(address)
+        return bool(message)
 
     def close_connection(self, address, sock_ind):  # Закрывает соединение
         try:

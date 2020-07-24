@@ -1,27 +1,10 @@
 import socket, time
 import curses, curses.textpad
+from cursesmenu import CursesMenu
+from cursesmenu.items import *
 from threading import Thread
 from src.server import Server
 from src.log import Log
-
-
-config = Log.read_and_return_dict("config.TXT")
-server_port = int(config["server_port"])
-listen_port = int(config["listen_port"])
-check_port = int(config["check_port"])
-timeout = float(config["timeout"])
-
-listening_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # Слушающий соккет
-listening_socket.bind(('localhost', listen_port))
-listening_socket.settimeout(timeout)
-
-check_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # Соккет проверки
-check_socket.bind(('localhost', check_port))
-check_socket.settimeout(timeout)
-
-server = Server(server_port, timeout)
-
-users_online = []  # Лист с пользователей онлайн
 
 
 # def load_error_window(text):  # Загружает окно загрузки с указанным текстом
@@ -160,68 +143,6 @@ users_online = []  # Лист с пользователей онлайн
 #
 #
 # def load_main_window(nick):  # Загружает основное окно. Нужно имя локального пользователя
-#
-#     def listen_loop():  # Прослушивает и ловит входящие подключения
-#         while running:
-#             time.sleep(0.1)
-#             if listening:
-#                 try:
-#                     data, address = listening_socket.recvfrom(32)
-#                 except socket.timeout:
-#                     continue
-#                 except OSError:
-#                     end()
-#                     load_error_window("Unknown error")
-#                     return
-#                 server.add_user_name(address[0], data.decode())
-#                 if not check_in_online(address[0]):
-#                     listen_frame_listbox_online.insert(END, address[0])
-#                     users_online.append(address[0])
-#                 listen_connect(address[0])
-#
-#     def check_loop():  # Прослушивает для проверки рентабельности подключения
-#         while running:
-#             time.sleep(0.1)
-#             try:
-#                 data, address = listening_socket.recvfrom(5)
-#             except socket.timeout:
-#                 continue
-#             except OSError:
-#                 end()
-#                 load_error_window("Unknown error")
-#                 return
-#             if data == b"alive":
-#                 check_socket.sendto(b"alive", (address[0], check_port))
-#
-#     def check_ip(address):  # Проверяет рентабельность подключения
-#         try:
-#             check_socket.sendto(b"alive", (address, check_port))
-#             data, address = check_socket.recvfrom(5)
-#         except socket.timeout:
-#             return False
-#         except OSError:
-#             return False
-#         if data == b"alive":
-#             listening_socket.sendto(nick.encode(), (address[0], listen_port))
-#             return True
-#         return False
-#
-#     def listen_connect(address):  # Подключает при входящем запросе на подключение
-#         if server.check_address(address):
-#             if not window_manager.get(address):
-#                 load_chat_window(address, nick)
-#             else:
-#                 load_error_window("Chat already open")
-#             return
-#         if check_ip(address):
-#             thread = Thread(target=server.create_connection, args=(address, server_port))
-#             thread.start()
-#             thread.join(0)
-#             load_chat_window(address, nick)
-#         else:
-#             load_error_window("Can`t connect to: " + address)
-#             return
-#
 #     def connect():   # Исходящее подключение
 #         address = enter_ip_text.get(1.0, END)
 #         address = address[:address.find("\n")]
@@ -343,6 +264,7 @@ users_online = []  # Лист с пользователей онлайн
 #     # Запуск
 #     main_window.mainloop()
 
+
 # Обовляет основное окно
 def refresh_main_window():
     main_window.clear()
@@ -350,49 +272,296 @@ def refresh_main_window():
     main_window.border(0)
 
 
+# Выключает всё
 def end_main_window():
+    global running
+    running = False
+    for i in users_online:
+        server.close_connection(i, server.get_ind_by_address(i))
+    server.kill()
     main_window.clear()
     main_window.refresh()
     curses.echo()
     curses.nocbreak()
     curses.curs_set(1)
     curses.endwin()
+    quit(0)
+
+
+def incoming_connect(_address):
+    if not server.check_address(_address):
+        return
+    if check_ip(_address):
+        thread = Thread(target=server.create_connection, args=(_address, server_port))
+        thread.start()
+        thread.join(0)
+        users_online.append(_address)
+    else:
+        print_error_window("Can`t connect to: " + _address)
+        return
+
+
+def disconnect_via_ip(_ip: str):
+    if check_in_online(_ip):
+        server.close_connection(_ip, server.get_ind_by_address(_ip))
+        users_online.remove(_ip)
+    else:
+        print_error_window("Wrong ip or you aren`t connected to this user")
+
+
+def listen_loop():
+    while running:
+        time.sleep(0.1)
+        if listening:
+            try:
+                data, address = listening_socket.recvfrom(32)
+            except socket.timeout:
+                continue
+            except OSError:
+                print_error_window("Unknown error")
+                end_main_window()
+                return
+            server.add_user_name(address[0], data.decode())
+            if not check_in_online(address[0]):
+                users_online.append(address[0])
+            incoming_connect(address[0])
+
+
+def check_loop():
+    while running:
+        time.sleep(0.1)
+        try:
+            data, address = listening_socket.recvfrom(5)
+        except socket.timeout:
+            continue
+        except OSError:
+            print_error_window("Unknown error")
+            end_main_window()
+            return
+        if data == b"alive":
+            check_socket.sendto(b"alive", (address[0], check_port))
+    else:
+        return
+
+
+# Проверка ip на валидность
+def check_ip(_address):
+    try:
+        check_socket.sendto(b"alive", (_address, check_port))
+        data, addr = check_socket.recvfrom(5)
+    except socket.timeout:
+        return False
+    except OSError:
+        return False
+    if data == b"alive":
+        listening_socket.sendto(name.encode(), (_address, check_port))
+        return True
+
+
+def print_connect_menu():
+    def end():
+        refresh_main_window()
+        return
+
+    refresh_main_window()
+    curses.echo()
+
+    data_const = "Enter user ip: "
+
+    win_size = (6 if size[0] // 2 > 6 else size[0] // 2, 30 if size[1] // 2 > 30 else size[1] // 2)
+    add_window = main_window.subwin(win_size[0], win_size[1], 1, 1)
+    add_size = add_window.getmaxyx()
+
+    add_window.border(0)
+    add_window.addstr(add_size[0] // 2 - 1, add_size[1] // 2 - len(data_const) // 2, data_const)
+
+    address = add_window.getstr(add_size[0] // 2, add_size[1] // 2)
+
+    if server.check_address(address):
+        end()
+    end()
+
+
+def connect_via_ip(_ip: str):
+    if server.check_address(_ip):
+        print_error_window("You already connected to this user")
+    if check_ip(_ip):
+        Log.save_with_ignore_same("peers.txt", _ip)
+        thread = Thread(target=server.create_connection, args=(_ip, server_port))
+        thread.start()
+        thread.join(0)
+        users_online.append(_ip)
+    else:
+        print_error_window("User if offline or ip is not valuable")
+
+
+def print_get_command_window():
+    # Возвращает арг или ничего
+    def get_arg(_list):
+        try:
+            return _list[1]
+        except IndexError:
+            return None
+
+    refresh_main_window()
+
+    # Команды и описание
+    commands_list = ["connect", "disconnect", "open", "listen", "quit", "help"]
+    commands_list_description = [" *user_ip*", " *user_ip*", " *user_ip*", " *on/off", "", ""]
+
+    # Вывод на экран комманд
+    main_window.addstr(2, 2, "Available commands: ")
+    for i in enumerate(commands_list):
+        main_window.addstr(3 + i[0], 4, i[1] + commands_list_description[i[0]])
+    main_window.addstr(size[0] - 2, 2, "Input: ")
+
+    # Получаем команды
+    command = str(main_window.getstr(size[0] - 2, 2 + len("Input: ")))
+    command = command[2:len(command)-1].split("|")
+    command = [i.split() for i in command]
+    # Разбираем и выполняем команды
+    is_quit = False
+    for i in command:
+        try:
+            comm = i[0]
+            if comm == 'connect':
+                arg = get_arg(i)
+                if arg is None:
+                    pass
+                connect_via_ip(arg)
+            elif comm == 'disconnect':
+                arg = get_arg(i)
+                if arg is None:
+                    pass
+                disconnect_via_ip(arg)
+            elif comm == 'open':
+                arg = get_arg(i)
+                if arg is None:
+                    pass
+            elif comm == 'listen':
+                arg = get_arg(i)
+                if arg is None:
+                    pass
+            elif comm == 'quit':
+                is_quit = True
+            elif command == 'help':
+                pass
+                # print help window
+            else:
+                pass
+        except:
+            pass
+    # Если дана команда на выход - выходим
+    if is_quit:
+        end_main_window()
+    else:
+        print_get_command_window()
 
 
 def print_get_name_window():
     refresh_main_window()
-    pos = (6 if size[0]//2 > 6 else size[0]//2, 30 if size[1]//2 > 30 else size[1]//2)
-    add_window = main_window.subwin(pos[0], pos[1], 1, 1)
+
+    # Размеры создаваемого окна
+    info_const1 = "Available length between 4 and 32"
+    info_const2 = "Wrong characters: \\n, \\"
+
+    # Само окно
+    win_size = (8 if size[0] // 2 > 8 else size[0] // 2, 50 if size[1] // 2 > 50 else size[1] // 2)
+    add_window = main_window.subwin(win_size[0], win_size[1], 1, 1)
     add_size = add_window.getmaxyx()
     add_window.border(0)
-    add_window.addstr(add_size[0]//2 - 1, add_size[1]//2 - len("Enter your name: ")//2, "Enter your name: ")
-    name = str(add_window.getstr(add_size[0]//2, add_size[1]//2 - len("Enter your name: ")//4))
+
+    add_window.addstr(add_size[0] // 2 - 2, add_size[1] // 2 - len("Enter your name: ") // 2, "Enter your name: ")
+    add_window.addstr(add_size[0] // 2 - 1, add_size[1] // 2 - len(info_const1) // 2, info_const1)
+    add_window.addstr(add_size[0] // 2, add_size[1] // 2 - len(info_const2) // 2, info_const2)
+
+    # Получаем имя
+    name = str(add_window.getstr(add_size[0] // 2 + 1,
+                                 add_size[1] // 2 - len("Enter your name: ") // 4, 32)).replace('b', '').replace('\'',
+                                                                                                                 '')
     add_window.standend()
+    refresh_main_window()
     return name
 
 
-def check_in_online(address):  # Проверяет пользователя в списке онлайн
+def print_error_window(_text: str):
+    error_const = " Oh, shit i`m sorry, there is some error:"
+    refresh_main_window()
+
+    win_size = (size[0] - 2, size[1] - 2)
+    add_window = main_window.subwin(win_size[0], win_size[1], 1, 1)
+    add_window.border(0)
+
+    add_size = add_window.getmaxyx()
+    add_window.addstr(add_size[0] // 2, add_size[1] // 2 - len(error_const) // 2, error_const)
+    add_window.addstr(add_size[0] // 2 + 1, add_size[1] // 2 - len(_text) // 2, _text)
+
+    curses.noecho()
+    add_window.timeout(3000)
+    add_window.getch()
+    curses.echo(True)
+
+    refresh_main_window()
+    return
+
+
+def check_in_online(_address):  # Проверяет пользователя в списке онлайн
     for i in users_online:
-        if address == i:
+        if _address == i:
             return True
     return False
 
 
-#  Инициализация окна
+# Инициализация окна
 main_window = curses.initscr()
 curses.cbreak(True)
-curses.curs_set(0)
 main_window.border(0)
 main_window.keypad(True)
 size = main_window.getmaxyx()
 
+# Глбальные переменные необходимые для работы
+running = True
+listening = False
+
+# Конфиги для сервера
+config = Log.read_and_return_dict("config.TXT")
+server_port = int(config["server_port"])
+listen_port = int(config["listen_port"])
+check_port = int(config["check_port"])
+timeout = float(config["timeout"])
+
+# Слушающий соккет
+listening_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+listening_socket.bind(('localhost', listen_port))
+listening_socket.settimeout(timeout)
+
+# Слушающий поток
+listen_thread = Thread(target=listen_loop)
+listen_thread.start()
+listen_thread.join(0)
+
+# Проверяющий соккет
+check_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+check_socket.bind(('localhost', check_port))
+check_socket.settimeout(timeout)
+
+# Проверяющий поток
+check_thread = Thread(target=check_loop)
+check_thread.start()
+check_thread.join(0)
+
+# Сервер
+server = Server(server_port, timeout)
+
+# Лист с пользователей онлайн
+users_online = []
+connected_users = []
+last_commands = []
+name = ""
+
 
 def run():
-    name = print_get_name_window().replace('b', '').replace('\'', '')
-    refresh_main_window()
-    main_window.addstr(3, 3, str(name))
-    main_window.getch()
-
+    print_get_command_window()
 
 # def run():  # Запускает сервер
 #     your_name = load_get_name_window()
@@ -400,4 +569,3 @@ def run():
 #         return
 #     server.set_server_name(your_name)
 #     load_main_window(your_name)
-
